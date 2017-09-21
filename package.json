@@ -1,0 +1,21 @@
+{
+  "name": "happner-2-activity-emulator",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "mocha test"
+  },
+  "devDependencies": {
+    "assert": "1.4.0",
+    "bluebird": "^3.5.0",
+    "chai": "3.5.0",
+    "expect.js": "0.3.1",
+    "mocha": "^3.4.2",
+    "request": "^2.81.0"
+  },
+  "dependencies": {
+    "async": "2.5.0",
+    "happner-2": "latest",
+    "inquirer": "^3.3.0",
+    "uuid": "3.1.0"
+  }
+}
