@@ -11,13 +11,16 @@ var meshCount = process.argv.length >= 4 ? parseInt(process.argv[3]) : 1;
 
 var reportMod = process.argv.length >= 5 ? parseInt(process.argv[4]) : 100;
 
-var silent = process.argv.length >= 6 ? process.argv[5] : false;
+var silent = !!(process.argv.length >= 6 && process.argv[5] != "false");
+
+var clientCount = process.argv.length >= 7 ? process.argv[6] : 1;
 
 var config = {
   eventsPerSec:evtCount,
   meshCount:meshCount,
   reportMod:reportMod,
-  silent:silent
+  silent:silent,
+  clientCount:clientCount
 };
 
 var emulator = require('../index').create(config);

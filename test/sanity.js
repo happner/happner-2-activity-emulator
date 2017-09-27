@@ -6,7 +6,7 @@ describe('happner-activity-emulator-sanity-tests', function () {
 
   var uuid = require('uuid');
 
-  it('tests the random activity generator running directly for 10 seconds', function (done) {
+  it('tests the random activity generator running directly for 10 seconds, single client', function (done) {
 
     this.timeout(15000);
 
@@ -16,21 +16,13 @@ describe('happner-activity-emulator-sanity-tests', function () {
       
       if (e) return done(e);
 
-      console.log('starting:::');
-
       emulator.start(function(e){
 
         if (e) return done(e);
 
-        console.log('started:::');
-
         setTimeout(function(){
 
-          console.log('reporting:::');
-
           emulator.report(function(e, report){
-
-            console.log('reported:::', e, report);
 
             if (e) return done(e);
 
@@ -44,6 +36,37 @@ describe('happner-activity-emulator-sanity-tests', function () {
     });
   });
 
+  it('tests the random activity generator running directly for 10 seconds, 2 clients', function (done) {
+
+    this.timeout(15000);
+
+    var emulator = require('..').create({clientCount:2});
+
+    emulator.initialize(function(e){
+
+      if (e) return done(e);
+
+      emulator.start(function(e){
+
+        if (e) return done(e);
+
+        setTimeout(function(){
+
+          emulator.report(function(e, report){
+
+            if (e) return done(e);
+
+            expect(report.invalid.length).to.be(0);
+
+            emulator.tearDown(done);
+          });
+
+        }, 5000)
+      })
+    });
+  });
+
+
   it('tests the random activity generator running directly for 10 seconds, 1000 evt per sec', function (done) {
 
     this.timeout(15000);
@@ -54,21 +77,13 @@ describe('happner-activity-emulator-sanity-tests', function () {
 
       if (e) return done(e);
 
-      console.log('starting:::');
-
       emulator.start(function(e){
 
         if (e) return done(e);
 
-        console.log('started:::');
-
         setTimeout(function(){
 
-          console.log('reporting:::');
-
           emulator.report(function(e, report){
-
-            console.log('reported:::', e, report);
 
             if (e) return done(e);
 
@@ -92,21 +107,13 @@ describe('happner-activity-emulator-sanity-tests', function () {
 
       if (e) return done(e);
 
-      console.log('starting:::');
-
       emulator.start(function(e){
 
         if (e) return done(e);
 
-        console.log('started:::');
-
         setTimeout(function(){
 
-          console.log('reporting:::');
-
           emulator.report(function(e, report){
-
-            console.log('reported:::', e, report);
 
             if (e) return done(e);
 
@@ -119,7 +126,7 @@ describe('happner-activity-emulator-sanity-tests', function () {
         }, 5000);
 
       }, true);
-
     });
   });
+
 });

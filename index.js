@@ -4,6 +4,7 @@ var path = require('path')
   , sep = require('path').sep
   , async = require('async')
   , Mesh = require('happner-2')
+  , Client = require('./lib/client')
 ;
 
 function Emulator(config){
@@ -12,17 +13,25 @@ function Emulator(config){
 
   if (!config.meshCount) config.meshCount = 1;
 
+  if (!config.clientCount) config.clientCount = 1;
+
   if (!config.eventsPerSec) config.eventsPerSec = 1;
 
   if (!config.eventTypes) config.eventTypes = [1,2,3,4,5,6,7,8,9,10];
 
   if (!config.reportMod) config.reportMod = 100;
 
+  if (!config.username) config.username = '_ADMIN';
+
+  if (!config.password) config.password = 'happn';
+
   this.__config = config;
 
   this.__report = {};
 
   this.__clients = {};
+
+  this.__happnerClients = {};
 
   this.__meshes = {};
 }
@@ -37,6 +46,49 @@ Emulator.prototype.message = function(message, override){
   if (!override && this.__config.silent) return;
 
   console.log(message);
+};
+
+Emulator.prototype.initializeHappnerClient = function(options, callback){
+
+  var _this = this;
+
+  var client = new Mesh.MeshClient({port: options.port});
+
+  client.login({
+    username: options.username,
+    password: options.password
+  }).then(function(e) {
+
+    if (e) return callback(e);
+
+    if (!_this.__happnerClients[options.port]) _this.__happnerClients[options.port] = [];
+
+    _this.__happnerClients[options.port].push(client);
+
+    callback();
+  })
+};
+
+Emulator.prototype.initializeClient = function(port, callback){
+
+  var _this = this;
+
+  var client = Client.create({port:port, username:'_ADMIN', password:'happn'});
+
+  _this.message('attaching:::');
+
+  client.attach(_this.__config, function(e){
+
+    _this.message('attached:::');
+
+    if (e) return callback(e);
+
+    if (!_this.__clients[port]) _this.__clients[port] = [];
+
+    _this.__clients[port].push(client);
+
+    callback();
+  });
 };
 
 Emulator.prototype.initialize = function(callback){
@@ -61,32 +113,31 @@ Emulator.prototype.initialize = function(callback){
       if (data.toString().match(/READY/)) {
 
         _this.__meshes[port] = remote;
-        
-        var client = new Mesh.MeshClient({port: port});
 
-        client.login({
-          username: '_ADMIN',
-          password: 'happn'
-        }).then(function(){
+        _this.initializeHappnerClient({port:port, username:'_ADMIN', password:'happn'}, function(e){
 
-          _this.__clients[port] = client;
+          if (e) return timeCB(e);
 
-          _this.message('attaching:::');
+          async.timesSeries(_this.__config.clientCount, function(time, clientTimeCB){
 
-          client.exchange.client.attach(_this.__config, function(e){
+            console.log('init cli:::');
+            _this.initializeClient(port, clientTimeCB);
 
-            _this.message('attached:::');
+          }, function(e){
 
-            if (e) return timeCB(e);
-
-            timeCB();
+            console.log('init mesh:::');
+            timeCB(e);
           });
 
-        }).catch(timeCB);
+        });
       }
     });
 
-  }, callback);
+  }, function(e){
+
+    console.log('calling back:::', e);
+    callback(e);
+  });
 };
 
 Emulator.prototype.start = function(eventsPerSec, callback, forcedError){
@@ -96,6 +147,7 @@ Emulator.prototype.start = function(eventsPerSec, callback, forcedError){
   try{
 
     if (typeof eventsPerSec == 'function') {
+
       forcedError = callback;
       callback = eventsPerSec;
       eventsPerSec = _this.__config.eventsPerSec;
@@ -125,22 +177,26 @@ Emulator.prototype.start = function(eventsPerSec, callback, forcedError){
 
       function() { return !_this.__stopped; },
 
-      function(eventsCB) {
+      function (eventsCB) {
 
         setTimeout(function() {
 
-          async.eachSeries(Object.keys(_this.__clients), function(clientPort, clientCB){
+          async.eachSeries(Object.keys(_this.__happnerClients), function(clientPort, clientsCB){
 
             //console.log('pushing random event:::', _this.__config.eventTypes);
-            _this.__clients[clientPort].exchange.server.pushRandomEvent(_this.__config, function(e){
+            async.eachSeries(_this.__happnerClients[clientPort], function(happnerClient, clientCB){
 
-              if (!_this.__calledStartBack) {
-                callback(e);
-                _this.__calledStartBack = true;
-              }
+              happnerClient.exchange.server.pushRandomEvent(_this.__config, function(e){
 
-              clientCB(e);
-            });
+                if (!_this.__calledStartBack) {
+                  callback(e);
+                  _this.__calledStartBack = true;
+                }
+
+                clientCB(e);
+              });
+
+            }, clientsCB);
 
           }, eventsCB);
 
@@ -174,41 +230,81 @@ Emulator.prototype.report = function(callback){
 
     if (e) return callback(e);
 
-    async.eachSeries(Object.keys(_this.__clients), function(clientPort, clientCB){
+    async.eachSeries(Object.keys(_this.__clients), function(clientPort, clientsCB){
 
-      var client = _this.__clients[clientPort];
+      var happnerClients = _this.__happnerClients[clientPort];
 
-      client.exchange.server.getEvents(function(e, events){
+      async.eachSeries(happnerClients, function(happnerClient, happnerClientCB){
 
-        if (e) return clientCB(e);
+        happnerClient.exchange.server.getEvents(function(e, events){
 
-        client.exchange.client.verifyEvents(events, function(e, verified){
+          if (e) return happnerClientCB(e);
 
-          if (e) return clientCB(e);
+          var clients = _this.__clients[clientPort];
 
-          _this.message('verified:::' + JSON.stringify(verified));
+          async.eachSeries(clients, function(client, clientCB){
 
-          if (verified.valid == false){
-
-            _this.__report.invalid.push({clientEvents:verified.clientEvents, serverEvents:events});
-
-          } else _this.__report.valid.push({clientEvents:verified.clientEvents, serverEvents:events});
-
-          client.exchange.server.clearEvents(function(e){
-
-            if (e) return clientCB(e);
-
-            client.exchange.client.clearEvents(function(e){
+            client.verifyEvents(events, function(e, verified){
 
               if (e) return clientCB(e);
 
-              return callback(null, _this.__report);
+              _this.message('verified:::' + JSON.stringify(verified));
+
+              if (verified.valid == false){
+
+                _this.__report.invalid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+              } else _this.__report.valid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+              client.clearEvents(function(e){
+
+                if (e) return clientCB(e);
+
+                client.clearEvents(clientCB);
+              });
+            });
+          }, function(e){
+
+            if (e) return happnerClientCB(e);
+
+            happnerClient.exchange.component.verifyEvents(events, function(e, verified){
+
+              if (e) return happnerClientCB(e);
+
+              console.log('service component verified:::', verified);
+
+              if (verified.valid == false){
+
+                _this.__report.invalid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+              } else _this.__report.valid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+              happnerClient.exchange.another_component.verifyEvents(events, function(e, verified){
+
+                if (e) return happnerClientCB(e);
+
+                console.log('another service component verified:::', verified);
+
+                if (verified.valid == false){
+
+                  _this.__report.invalid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+                } else _this.__report.valid.push({clientEvents:verified.clientEvents, serverEvents:events});
+
+                happnerClientCB();
+              });
             });
           });
         });
-      });
 
-    }, callback);
+      }, clientsCB);
+
+    }, function(e){
+
+      if (e) return callback(e);
+
+      return callback(null, _this.__report);
+    });
   });
 };
 

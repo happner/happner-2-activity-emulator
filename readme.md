@@ -81,6 +81,11 @@ node server/start 1000 2
 node server/start 1000 2 50
 
 # start running, 1000 events per second, 1 mesh, report output every 50 events, silently
+
 node server/start 1000 2 50 true
+
+# start running, 1000 events per second, 1 mesh, report output every 100 events, silently with 10 w/s clients
+
+node server/start 1000 1 100 false 10
 
 ```
